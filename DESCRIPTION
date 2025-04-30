@@ -1,0 +1,18 @@
+Package: caspoc
+Type: Package
+Title: Double-split cross-validation with mixOmics spls
+Version: 0.1.0
+Author: Michael Widdowson, Jonathan Thorsen
+Maintainer: Michael Widdowson <michael.widdowson@dbac.dk>, Jonathan Thorsen <jonathan.thorsen@dbac.dk>
+Description: This package wraps the sparse Partial Least squares (spls) function from the excellent mixOmics package within a double-split cross-validation approach.
+    It allows tuning of hyperparameters (keepX, keepY, ncomp) in one hold-out set, and leaves another hold-out set unbiased which can be used for inference.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Imports:
+  dplyr,
+  magrittr,
+  tibble,
+  mixOmics,
+  caret
+RoxygenNote: 7.3.2
