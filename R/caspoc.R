@@ -139,15 +139,15 @@ deflate_sPLS_data <- function(splsModel, ncomp, trainX, trainY, tuneX, tuneY, te
 #' @param fixY A vector of keepY values for each component; if you want to fix eg. keepY = 10 for comp1 but want to do a grid search on comp2. Leave as NULL for grid search on all components
 #' @param base_seed Random seed for reproducibility. Use instead of 'set.seed()', since the function internally updates the seed between repeats.
 #' @return A list containing several elements:
-#' #' \describe{
-#'   \item{results_tune_df}{A data.frame with correlation results for each repeat and hyperparameter combination from the tuning folds}.
-#'   \item{results_test_df}{A data.frame with correlation results for each repeat and hyperparameter combination from the testing folds}.
-#'   \item{full_train_loadingsX}{A data.frame with X loadings for each variable in each fold, repeat and hyperparameter combination based on training folds}.
-#'   \item{full_train_loadingsY}{A data.frame with Y loadings for each variable in each fold, repeat and hyperparameter combination based on training folds}.
-#'   \item{full_tuneX}{A data.frame with all X component scores for each repeat and hyperparameter combination from the tuning folds}.
-#'   \item{full_tuneY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the tuning folds}.
-#'   \item{full_testX}{A data.frame with all X component scores for each repeat and hyperparameter combination from the testing folds}.
-#'   \item{full_testY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the testing folds}.
+#' \describe{
+#'   \item{results_tune_df}{A data.frame with correlation results for each repeat and hyperparameter combination from the tuning folds}
+#'   \item{results_test_df}{A data.frame with correlation results for each repeat and hyperparameter combination from the testing folds}
+#'   \item{full_train_loadingsX}{A data.frame with X loadings for each variable in each fold, repeat and hyperparameter combination based on training folds}
+#'   \item{full_train_loadingsY}{A data.frame with Y loadings for each variable in each fold, repeat and hyperparameter combination based on training folds}
+#'   \item{full_tuneX}{A data.frame with all X component scores for each repeat and hyperparameter combination from the tuning folds}
+#'   \item{full_tuneY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the tuning folds}
+#'   \item{full_testX}{A data.frame with all X component scores for each repeat and hyperparameter combination from the testing folds}
+#'   \item{full_testY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the testing folds}
 #'   }
 #' @examples
 #' library(mixOmics)

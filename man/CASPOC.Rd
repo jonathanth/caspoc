@@ -40,15 +40,15 @@ CASPOC(
 }
 \value{
 A list containing several elements:
-#' \describe{
-  \item{results_tune_df}{A data.frame with correlation results for each repeat and hyperparameter combination from the tuning folds}.
-  \item{results_test_df}{A data.frame with correlation results for each repeat and hyperparameter combination from the testing folds}.
-  \item{full_train_loadingsX}{A data.frame with X loadings for each variable in each fold, repeat and hyperparameter combination based on training folds}.
-  \item{full_train_loadingsY}{A data.frame with Y loadings for each variable in each fold, repeat and hyperparameter combination based on training folds}.
-  \item{full_tuneX}{A data.frame with all X component scores for each repeat and hyperparameter combination from the tuning folds}.
-  \item{full_tuneY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the tuning folds}.
-  \item{full_testX}{A data.frame with all X component scores for each repeat and hyperparameter combination from the testing folds}.
-  \item{full_testY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the testing folds}.
+\describe{
+  \item{results_tune_df}{A data.frame with correlation results for each repeat and hyperparameter combination from the tuning folds}
+  \item{results_test_df}{A data.frame with correlation results for each repeat and hyperparameter combination from the testing folds}
+  \item{full_train_loadingsX}{A data.frame with X loadings for each variable in each fold, repeat and hyperparameter combination based on training folds}
+  \item{full_train_loadingsY}{A data.frame with Y loadings for each variable in each fold, repeat and hyperparameter combination based on training folds}
+  \item{full_tuneX}{A data.frame with all X component scores for each repeat and hyperparameter combination from the tuning folds}
+  \item{full_tuneY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the tuning folds}
+  \item{full_testX}{A data.frame with all X component scores for each repeat and hyperparameter combination from the testing folds}
+  \item{full_testY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the testing folds}
   }
 }
 \description{
@@ -61,5 +61,7 @@ mydata_X <- breast.TCGA$data.train$mrna
 mydata_Y <- breast.TCGA$data.train$protein
 dim(mydata_X)
 dim(mydata_Y)
-#my_analysis <- CASPOC(mydata_X, mydata_Y, numRepeats = 5, numFolds = 10, keepX_options = c(50, 100, 200), keepY_options = c(50, 100, 142), ncomp = 1, base_seed = 42)
+#my_analysis <- CASPOC(mydata_X, mydata_Y, numRepeats = 5, numFolds = 10,
+#   keepX_options = c(50, 100, 200), keepY_options = c(50, 100, 142),
+#   ncomp = 1, base_seed = 42)
 }
