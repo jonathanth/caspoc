@@ -14,7 +14,8 @@ CASPOC(
   keepY_options = NULL,
   fixX = NULL,
   fixY = NULL,
-  base_seed = 1
+  base_seed = 1,
+  manual_folds = NULL
 )
 }
 \arguments{
@@ -37,6 +38,8 @@ CASPOC(
 \item{fixY}{A vector of keepY values for each component; if you want to fix eg. keepY = 10 for comp1 but want to do a grid search on comp2. Leave as NULL for grid search on all components}
 
 \item{base_seed}{Random seed for reproducibility. Use instead of 'set.seed()', since the function internally updates the seed between repeats.}
+
+\item{manual_folds}{Manually supply folds. Should be a list of lists. Outer list should be of length numRepeats. Inner list should be of length numFolds and contain integer vectors supplying row indices for each fold.}
 }
 \value{
 A list containing several elements:
@@ -49,6 +52,7 @@ A list containing several elements:
   \item{full_tuneY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the tuning folds}
   \item{full_testX}{A data.frame with all X component scores for each repeat and hyperparameter combination from the testing folds}
   \item{full_testY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the testing folds}
+  \item{folds}{Return the list of folds for CV}
   }
 }
 \description{

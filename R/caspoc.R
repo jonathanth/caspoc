@@ -138,6 +138,7 @@ deflate_sPLS_data <- function(splsModel, ncomp, trainX, trainY, tuneX, tuneY, te
 #' @param fixX A vector of keepX values for each component; if you want to fix eg. keepX = 10 for comp1 but want to do a grid search on comp2. Leave as NULL for grid search on all components
 #' @param fixY A vector of keepY values for each component; if you want to fix eg. keepY = 10 for comp1 but want to do a grid search on comp2. Leave as NULL for grid search on all components
 #' @param base_seed Random seed for reproducibility. Use instead of 'set.seed()', since the function internally updates the seed between repeats.
+#' @param manual_folds Manually supply folds. Should be a list of lists. Outer list should be of length numRepeats. Inner list should be of length numFolds and contain integer vectors supplying row indices for each fold.
 #' @return A list containing several elements:
 #' \describe{
 #'   \item{results_tune_df}{A data.frame with correlation results for each repeat and hyperparameter combination from the tuning folds}
@@ -148,6 +149,7 @@ deflate_sPLS_data <- function(splsModel, ncomp, trainX, trainY, tuneX, tuneY, te
 #'   \item{full_tuneY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the tuning folds}
 #'   \item{full_testX}{A data.frame with all X component scores for each repeat and hyperparameter combination from the testing folds}
 #'   \item{full_testY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the testing folds}
+#'   \item{folds}{Return the list of folds for CV}
 #'   }
 #' @examples
 #' library(mixOmics)
@@ -161,7 +163,7 @@ deflate_sPLS_data <- function(splsModel, ncomp, trainX, trainY, tuneX, tuneY, te
 #' #   ncomp = 1, base_seed = 42)
 #' @importFrom magrittr %>%
 #' @export
-CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_options = NULL, keepY_options = NULL, fixX = NULL, fixY = NULL, base_seed = 1) {
+CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_options = NULL, keepY_options = NULL, fixX = NULL, fixY = NULL, base_seed = 1, manual_folds = NULL) {
   if(!requireNamespace("dplyr", quietly = TRUE))
     stop("dplyr package required")
   if(!requireNamespace("tibble", quietly = TRUE))
@@ -255,8 +257,23 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
   numRepeats = numRepeats
   numFolds = numFolds
 
+  # Initialize folds
+  if(is.null(manual_folds)){
+    folds <- vector("list", length = numRepeats)
+  }
+  if(!is.null(manual_folds)){
+    if(!is.list(manual_folds) | !is.list(manual_folds[[1]])){
+      stop("manual_folds should be a list of lists")
+    }
+    if(length(manual_folds) != numRepeats){
+      stop("Length of outer list in manual_folds should be equal to numRepeats")
+    }
+    if(length(manual_folds[[1]]) != numFolds){
+      stop("Length of outer list in manual_folds should be equal to numFolds")
+    }
+    folds <- manual_folds
+  }
 
-  folds <- vector("list", length = numFolds)
 
   # Initialize dataframe to store results
   results_tune_df <- data.frame()
@@ -278,11 +295,10 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
     # Set seed for stochastic variation and reproducibility for each repeat
     set.seed(base_seed + rep)
 
-    # Split the data into random folds
-    folds <- caret::createFolds(seq_len(nrow(X)), k = numFolds, list = TRUE)
-    #folds <- groupdata2::fold(as.data.frame(X), k = 10, num_col = c(names(X)))
-    #folds <- createFolds(factor(tmp$Delivery_Binary), k = numFolds, list = TRUE)
-
+    if(is.null(manual_folds)){
+      # Split the data into random folds within this repeat
+      folds[[rep]] <- caret::createFolds(seq_len(nrow(X)), k = numFolds, list = TRUE)
+    }
 
     # Running through every combination of keepX and keepY
     for (x in keepX_options) {
@@ -303,9 +319,9 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
         # Beginning of cross-validation
         for (i in 1:numFolds) {
           # Define indices for training, tuning, and testing
-          tuneIdx <- folds[[i]]
-          testIdx <- folds[[(i %% numFolds) + 1]]  # Ensure the index cycles correctly
-          trainIdx <- unlist(folds[-c(i, (i %% numFolds) + 1)])  # Exclude tuning and testing fold
+          tuneIdx <- folds[[rep]][[i]]
+          testIdx <- folds[[rep]][[(i %% numFolds) + 1]]  # Ensure the index cycles correctly
+          trainIdx <- unlist(folds[[rep]][-c(i, (i %% numFolds) + 1)])  # Exclude tuning and testing fold
 
           # Split data
           trainX <- X[trainIdx, ]
@@ -503,5 +519,6 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
               full_tuneX = full_tuneX,
               full_tuneY = full_tuneY,
               full_testX = full_testX,
-              full_testY = full_testY))
+              full_testY = full_testY,
+              folds = folds))
 }
