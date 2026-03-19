@@ -172,7 +172,27 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
     stop("mixOmics package required")
   if(!requireNamespace("caret", quietly = TRUE))
     stop("caret package required")
+  # if(!requireNamespace("abind", quietly = TRUE))
+  #   stop("abind package required")
 
+  # Utility functions
+  arr3d_to_df <- function(x, comp_prefix = "comp") {
+    d <- dim(x)
+    stopifnot(length(d) == 3)
+
+    out <- lapply(seq_len(d[3]), function(k) {
+      df <- as.data.frame(x[, , k, drop = FALSE][, , 1])
+      if(!is.null(colnames(Y))){
+        colnames(df) <- colnames(Y)
+      } else {
+        colnames(df) <- paste0("Y", sprintf(paste0("%0", nchar(ncol(Y)), "d"), 1:ncol(Y)))
+      }
+      df$component <- paste0(comp_prefix, k)
+      df
+    })
+
+    do.call(rbind, out)
+  }
 
   # Some safeguard error messages
   if(missing(X)) {
@@ -284,6 +304,10 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
   full_testY <- data.frame()
   full_train_loadingsX <- data.frame()
   full_train_loadingsY <- data.frame()
+  yhat_tune <- list()
+  yhat_test <- list()
+  full_yhat_tune <- data.frame() # array(numeric(), dim = c(0, ncol(Y), ncomp))
+  full_yhat_test <- data.frame() # array(numeric(), dim = c(0, ncol(Y), ncomp))
   # full_exp_var_tuneX <- data.frame()
   # full_exp_var_tuneY <- data.frame()
   # full_variates_trainX <- data.frame()
@@ -464,6 +488,11 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
           # concatenated_train_variatesX[[i]] <- variates_train_X
           # concatenated_train_variatesY[[i]] <- variates_train_Y
 
+          # Store yhat for each fold
+          predict_mixOmics_pls <- getS3method("predict", "mixo_spls")
+          yhat_tune[[i]] <- arr3d_to_df(predict_mixOmics_pls(splsModel, tuneX)$predict)
+          yhat_test[[i]] <- arr3d_to_df(predict_mixOmics_pls(splsModel, testX)$predict)
+
         }
 
         # Concatenate results across all folds for the current iteration of keepX/keepY per current repeat
@@ -475,6 +504,14 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
 
         full_train_loadingsX <- rbind(full_train_loadingsX, do.call(rbind, concatenated_trainX_loadings))
         full_train_loadingsY <- rbind(full_train_loadingsY, do.call(rbind, concatenated_trainY_loadings))
+
+
+        # # array version
+        # full_yhat_tune <- abind(full_yhat_tune, do.call(abind, list(yhat_tune, along = 1)), along = 1)
+        # full_yhat_test <- abind(full_yhat_test, do.call(abind, list(yhat_test, along = 1)), along = 1)
+        # df version
+        full_yhat_tune <- rbind(full_yhat_tune, do.call(rbind, yhat_tune) %>% mutate(keepX = x, keepY = y, Repeat = rep))
+        full_yhat_test <- rbind(full_yhat_test, do.call(rbind, yhat_test) %>% mutate(keepX = x, keepY = y, Repeat = rep))
 
         # full_exp_var_tuneX <- rbind(full_exp_var_tuneX, do.call(rbind, concatenated_exp_varX))
         # full_exp_var_tuneY <- rbind(full_exp_var_tuneY, do.call(rbind, concatenated_exp_varY))
@@ -512,13 +549,14 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
     }
     print(paste0("Repeat ", rep,": ", rep, "/", numRepeats, " repeats complete!"))
   }
+
   return(list(results_tune_df = results_tune_df,
               results_test_df = results_test_df,
               full_train_loadingsX = full_train_loadingsX,
               full_train_loadingsY = full_train_loadingsY,
               full_tuneX = full_tuneX,
               full_tuneY = full_tuneY,
-              full_testX = full_testX,
-              full_testY = full_testY,
-              folds = folds))
+              folds = folds,
+              full_yhat_tune = full_yhat_tune,
+              full_yhat_test = full_yhat_test))
 }

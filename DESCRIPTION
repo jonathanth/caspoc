@@ -1,7 +1,7 @@
 Package: caspoc
 Type: Package
 Title: Double-split cross-validation with mixOmics spls
-Version: 0.1.0
+Version: 0.1.1
 Author: Michael Widdowson, Jonathan Thorsen
 Maintainer: Michael Widdowson <michael.widdowson@dbac.dk>, Jonathan Thorsen <jonathan.thorsen@dbac.dk>
 Description: This package wraps the sparse Partial Least squares (spls) function from the excellent mixOmics package within a double-split cross-validation approach.
