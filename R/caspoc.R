@@ -556,6 +556,8 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
               full_train_loadingsY = full_train_loadingsY,
               full_tuneX = full_tuneX,
               full_tuneY = full_tuneY,
+              full_testX = full_testX,
+              full_testY = full_testY,
               folds = folds,
               full_yhat_tune = full_yhat_tune,
               full_yhat_test = full_yhat_test))
