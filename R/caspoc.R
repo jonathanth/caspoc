@@ -490,8 +490,10 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
 
           # Store yhat for each fold
           predict_mixOmics_pls <- getS3method("predict", "mixo_spls")
-          yhat_tune[[i]] <- arr3d_to_df(predict_mixOmics_pls(splsModel, tuneX)$predict)
-          yhat_test[[i]] <- arr3d_to_df(predict_mixOmics_pls(splsModel, testX)$predict)
+          yhat_tune[[i]] <- arr3d_to_df(predict_mixOmics_pls(splsModel, tuneX)$predict) %>%
+            mutate(fold = i)
+          yhat_test[[i]] <- arr3d_to_df(predict_mixOmics_pls(splsModel, testX)$predict) %>%
+            mutate(fold = i)
 
         }
 
@@ -559,6 +561,10 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
               full_testX = full_testX,
               full_testY = full_testY,
               folds = folds,
-              full_yhat_tune = full_yhat_tune,
-              full_yhat_test = full_yhat_test))
+              full_yhat_tune = full_yhat_tune %>%
+                select(Repeat, fold, keepX, keepY, component, everything()),
+              full_yhat_test = full_yhat_test %>%
+                select(Repeat, fold, keepX, keepY, component, everything())
+              )
+         )
 }
