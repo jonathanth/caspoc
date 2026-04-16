@@ -139,6 +139,7 @@ deflate_sPLS_data <- function(splsModel, ncomp, trainX, trainY, tuneX, tuneY, te
 #' @param fixY A vector of keepY values for each component; if you want to fix eg. keepY = 10 for comp1 but want to do a grid search on comp2. Leave as NULL for grid search on all components
 #' @param base_seed Random seed for reproducibility. Use instead of 'set.seed()', since the function internally updates the seed between repeats.
 #' @param manual_folds Manually supply folds. Should be a list of lists. Outer list should be of length numRepeats. Inner list should be of length numFolds and contain integer vectors supplying row indices for each fold.
+#' @param sign_flipping A boolean option for automatic alignment of signs in the output, attempting to resolve sign ambiguity from the sPLS using a PCA method. This will only be done for the significant associations between X and Y. Default is TRUE.
 #' @return A list containing several elements:
 #' \describe{
 #'   \item{results_tune_df}{A data.frame with correlation results for each repeat and hyperparameter combination from the tuning folds}
@@ -163,7 +164,7 @@ deflate_sPLS_data <- function(splsModel, ncomp, trainX, trainY, tuneX, tuneY, te
 #' #   ncomp = 1, base_seed = 42)
 #' @importFrom magrittr %>%
 #' @export
-CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_options = NULL, keepY_options = NULL, fixX = NULL, fixY = NULL, base_seed = 1, manual_folds = NULL) {
+CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_options = NULL, keepY_options = NULL, fixX = NULL, fixY = NULL, base_seed = 1, manual_folds = NULL, sign_flipping = TRUE) {
   if(!requireNamespace("dplyr", quietly = TRUE))
     stop("dplyr package required")
   if(!requireNamespace("tibble", quietly = TRUE))
@@ -172,27 +173,7 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
     stop("mixOmics package required")
   if(!requireNamespace("caret", quietly = TRUE))
     stop("caret package required")
-  # if(!requireNamespace("abind", quietly = TRUE))
-  #   stop("abind package required")
 
-  # Utility functions
-  arr3d_to_df <- function(x, comp_prefix = "comp") {
-    d <- dim(x)
-    stopifnot(length(d) == 3)
-
-    out <- lapply(seq_len(d[3]), function(k) {
-      df <- as.data.frame(x[, , k, drop = FALSE][, , 1])
-      if(!is.null(colnames(Y))){
-        colnames(df) <- colnames(Y)
-      } else {
-        colnames(df) <- paste0("Y", sprintf(paste0("%0", nchar(ncol(Y)), "d"), 1:ncol(Y)))
-      }
-      df$component <- paste0(comp_prefix, k)
-      df
-    })
-
-    do.call(rbind, out)
-  }
 
   # Some safeguard error messages
   if(missing(X)) {
@@ -213,8 +194,11 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
   if(!is.numeric(ncomp)) {
     stop("Error: 'ncomp' must be numerical.")
   }
+  if(!isTRUEorFALSE(sign_flipping)) {
+    stop("Error: 'sign_flipping' must be TRUE/FALSE.")
+  }
 
-  cat("Performing CRISS-CROSS\n")
+  cat("Performing CASPOC\n")
   cat(sprintf("X dimensions: %d x %d\n", dim(X)[1], dim(X)[2]))
   cat(sprintf("Y dimensions: %d x %d\n", dim(Y)[1], dim(Y)[2]))
 
@@ -293,6 +277,14 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
     }
     folds <- manual_folds
   }
+  
+  
+  # Notification of sign flipping on/off
+  if(sign_flipping == TRUE) {
+    cat(sprintf("Output will be checked for sign flipping ambiguity, and will attempt to automatically align sign (+/-) output using PCA.\n"))
+  } else {
+    cat(sprintf("Note: Output will not be checked for sign flipping ambiguity. Please verify manually.\n"))
+  }
 
 
   # Initialize dataframe to store results
@@ -304,10 +296,6 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
   full_testY <- data.frame()
   full_train_loadingsX <- data.frame()
   full_train_loadingsY <- data.frame()
-  yhat_tune <- list()
-  yhat_test <- list()
-  full_yhat_tune <- data.frame() # array(numeric(), dim = c(0, ncol(Y), ncomp))
-  full_yhat_test <- data.frame() # array(numeric(), dim = c(0, ncol(Y), ncomp))
   # full_exp_var_tuneX <- data.frame()
   # full_exp_var_tuneY <- data.frame()
   # full_variates_trainX <- data.frame()
@@ -488,13 +476,6 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
           # concatenated_train_variatesX[[i]] <- variates_train_X
           # concatenated_train_variatesY[[i]] <- variates_train_Y
 
-          # Store yhat for each fold
-          predict_mixOmics_pls <- getS3method("predict", "mixo_spls")
-          yhat_tune[[i]] <- arr3d_to_df(predict_mixOmics_pls(splsModel, tuneX)$predict) %>%
-            mutate(fold = i)
-          yhat_test[[i]] <- arr3d_to_df(predict_mixOmics_pls(splsModel, testX)$predict) %>%
-            mutate(fold = i)
-
         }
 
         # Concatenate results across all folds for the current iteration of keepX/keepY per current repeat
@@ -506,14 +487,6 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
 
         full_train_loadingsX <- rbind(full_train_loadingsX, do.call(rbind, concatenated_trainX_loadings))
         full_train_loadingsY <- rbind(full_train_loadingsY, do.call(rbind, concatenated_trainY_loadings))
-
-
-        # # array version
-        # full_yhat_tune <- abind(full_yhat_tune, do.call(abind, list(yhat_tune, along = 1)), along = 1)
-        # full_yhat_test <- abind(full_yhat_test, do.call(abind, list(yhat_test, along = 1)), along = 1)
-        # df version
-        full_yhat_tune <- rbind(full_yhat_tune, do.call(rbind, yhat_tune) %>% mutate(keepX = x, keepY = y, Repeat = rep))
-        full_yhat_test <- rbind(full_yhat_test, do.call(rbind, yhat_test) %>% mutate(keepX = x, keepY = y, Repeat = rep))
 
         # full_exp_var_tuneX <- rbind(full_exp_var_tuneX, do.call(rbind, concatenated_exp_varX))
         # full_exp_var_tuneY <- rbind(full_exp_var_tuneY, do.call(rbind, concatenated_exp_varY))
@@ -551,7 +524,134 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
     }
     print(paste0("Repeat ", rep,": ", rep, "/", numRepeats, " repeats complete!"))
   }
+  
+  if (sign_flipping == TRUE) {
+    print(paste0("Checking and resolving for sign ambiguity in output."))
+    
+    
+    # Gets significant combinations of keepX and keepY per component using the median
+    sig_combos <- results_tune_df %>%
+      group_by(KeepX, KeepY, Component) %>%
+      mutate(corr_median = median(Correlation, na.rm = TRUE)) %>%
+      filter(Correlation == corr_median) %>%
+      filter(Pvalue <= 0.05, Correlation > 0) %>%
+      ungroup() %>%
+      distinct(KeepX, KeepY, Component)
+    
+    
+    # Optional: store which repeat/fold got flipped for each keepX/keepY/component
+    flip_index_list <- vector("list", nrow(sig_combos))
+    
+    for (i in seq_len(nrow(sig_combos))) {
+      
+      keepx_i <- sig_combos$KeepX[i]
+      keepy_i <- sig_combos$KeepY[i]
+      comp_i  <- sig_combos$Component[i]
+      comp_col_name <- paste0("comp", comp_i)
+      
+      # Combined X and Y for robust PCA orientation
+      full_train_loadings <- rbind(
+        full_train_loadingsX %>%
+          filter(keepX == keepx_i, keepY == keepy_i),
+        full_train_loadingsY %>%
+          filter(keepX == keepx_i, keepY == keepy_i)
+      )
+      
+      pca_input <- full_train_loadings %>%
+        dplyr::select(Repeat, Fold, Variable, all_of(comp_col_name)) %>%
+        pivot_wider(
+          id_cols = c(Repeat, Fold),
+          names_from = Variable,
+          values_from = all_of(comp_col_name)
+        ) %>%
+        arrange(Repeat, Fold)
+      
+      pc1 <- pca_input %>%
+        dplyr::select(Repeat, Fold)
+      
+      pca <- pca_input %>%
+        dplyr::select(-Repeat, -Fold) %>%
+        prcomp(scale. = FALSE, center = FALSE)
+      
+      pc1$PC1 <- pca$x[, 1]
+      
+      # Only rows that should flip
+      flip_index <- pc1 %>%
+        filter(PC1 < 0) %>%
+        mutate(
+          KeepX = keepx_i,
+          KeepY = keepy_i,
+          Component = comp_i
+        )
+      
+      flip_index_list[[i]] <- flip_index
+      
+      # Shared Repeat/Fold keys to flip
+      flip_keys <- paste(flip_index$Repeat, flip_index$Fold)
+      
+      # ----- Update train loadings X -----
+      idx <- with(
+        full_train_loadingsX,
+        keepX == keepx_i &
+          keepY == keepy_i &
+          paste(Repeat, Fold) %in% flip_keys
+      )
+      full_train_loadingsX[idx, comp_col_name] <-
+        -full_train_loadingsX[idx, comp_col_name]
+      
+      # ----- Update train loadings Y -----
+      idx <- with(
+        full_train_loadingsY,
+        keepX == keepx_i &
+          keepY == keepy_i &
+          paste(Repeat, Fold) %in% flip_keys
+      )
+      full_train_loadingsY[idx, comp_col_name] <-
+        -full_train_loadingsY[idx, comp_col_name]
+      
+      # ----- Update tune X -----
+      idx <- with(
+        full_tuneX,
+        keepX == keepx_i &
+        keepY == keepy_i &
+        paste(Repeat, Fold) %in% flip_keys
+      )
+      full_tuneX[idx, comp_col_name] <-
+        -full_tuneX[idx, comp_col_name]
 
+      # ----- Update tune Y -----
+      idx <- with(
+        full_tuneY,
+        keepX == keepx_i &
+        keepY == keepy_i &
+        paste(Repeat, Fold) %in% flip_keys
+      )
+      full_tuneY[idx, comp_col_name] <-
+        -full_tuneY[idx, comp_col_name]
+
+      #----- Update test X -----
+      idx <- with(
+        full_testX,
+        keepX == keepx_i &
+          keepY == keepy_i &
+          paste(Repeat, Fold) %in% flip_keys
+      )
+      full_testX[idx, comp_col_name] <-
+        -full_testX[idx, comp_col_name]
+      
+      # ----- Update test Y -----
+      idx <- with(
+        full_testY,
+        keepX == keepx_i &
+          keepY == keepy_i &
+          paste(Repeat, Fold) %in% flip_keys
+      )
+      full_testY[idx, comp_col_name] <-
+        -full_testY[idx, comp_col_name]
+    }
+    
+  }
+  
   return(list(results_tune_df = results_tune_df,
               results_test_df = results_test_df,
               full_train_loadingsX = full_train_loadingsX,
@@ -560,11 +660,5 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
               full_tuneY = full_tuneY,
               full_testX = full_testX,
               full_testY = full_testY,
-              folds = folds,
-              full_yhat_tune = full_yhat_tune %>%
-                select(Repeat, fold, keepX, keepY, component, everything()),
-              full_yhat_test = full_yhat_test %>%
-                select(Repeat, fold, keepX, keepY, component, everything())
-              )
-         )
+              folds = folds))
 }
