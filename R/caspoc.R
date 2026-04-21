@@ -139,6 +139,7 @@ deflate_sPLS_data <- function(splsModel, ncomp, trainX, trainY, tuneX, tuneY, te
 #' @param fixY A vector of keepY values for each component; if you want to fix eg. keepY = 10 for comp1 but want to do a grid search on comp2. Leave as NULL for grid search on all components
 #' @param base_seed Random seed for reproducibility. Use instead of 'set.seed()', since the function internally updates the seed between repeats.
 #' @param manual_folds Manually supply folds. Should be a list of lists. Outer list should be of length numRepeats. Inner list should be of length numFolds and contain integer vectors supplying row indices for each fold.
+#' @param sign_flipping A boolean option for automatic alignment of signs in the output, attempting to resolve sign ambiguity from the sPLS using a PCA method. This will only be done for the significant associations between X and Y. A flip summary and log will be returned. Default is TRUE.
 #' @return A list containing several elements:
 #' \describe{
 #'   \item{results_tune_df}{A data.frame with correlation results for each repeat and hyperparameter combination from the tuning folds}
@@ -163,7 +164,7 @@ deflate_sPLS_data <- function(splsModel, ncomp, trainX, trainY, tuneX, tuneY, te
 #' #   ncomp = 1, base_seed = 42)
 #' @importFrom magrittr %>%
 #' @export
-CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_options = NULL, keepY_options = NULL, fixX = NULL, fixY = NULL, base_seed = 1, manual_folds = NULL) {
+CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_options = NULL, keepY_options = NULL, fixX = NULL, fixY = NULL, base_seed = 1, manual_folds = NULL, sign_flipping = TRUE) {
   if(!requireNamespace("dplyr", quietly = TRUE))
     stop("dplyr package required")
   if(!requireNamespace("tibble", quietly = TRUE))
@@ -213,8 +214,11 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
   if(!is.numeric(ncomp)) {
     stop("Error: 'ncomp' must be numerical.")
   }
+  if(!isTRUEorFALSE(sign_flipping)) {
+    stop("Error: 'sign_flipping' must be TRUE/FALSE.")
+  }
 
-  cat("Performing CRISS-CROSS\n")
+  cat("Dimensions of data:\n")
   cat(sprintf("X dimensions: %d x %d\n", dim(X)[1], dim(X)[2]))
   cat(sprintf("Y dimensions: %d x %d\n", dim(Y)[1], dim(Y)[2]))
 
@@ -294,7 +298,13 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
     folds <- manual_folds
   }
 
-
+  # Notification of sign flipping on/off
+  if(sign_flipping == TRUE) {
+    cat(sprintf("Output will be checked for sign flipping ambiguity, and will attempt to automatically align the signs of the output using PCA.\n\n"))
+  } else {
+    cat(sprintf("Note: Output will not be checked for sign flipping ambiguity. Please verify manually if sign flipping occured by viewing the loadings.\n\n"))
+  }
+  
   # Initialize dataframe to store results
   results_tune_df <- data.frame()
   results_test_df <- data.frame()
@@ -313,6 +323,7 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
   # full_variates_trainX <- data.frame()
   # full_variates_trainY <- data.frame()
 
+  cat("Performing CASPOC\n")
 
   # Start of algorithm
   for (rep in 1:numRepeats) {
@@ -551,6 +562,161 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
     }
     print(paste0("Repeat ", rep,": ", rep, "/", numRepeats, " repeats complete!"))
   }
+  
+  sig_combos <- tibble::tibble()
+  flip_log_df <- tibble::tibble()
+  flip_summary_df <- tibble::tibble()
+  
+  if (sign_flipping == TRUE) {
+    cat("\nChecking for sign ambiguity and resolving output.\n")
+    
+    # Significant combinations to inspect for sign flipping
+    sig_combos <- results_tune_df %>%
+      group_by(KeepX, KeepY, Component) %>%
+      mutate(corr_median = median(Correlation, na.rm = TRUE)) %>%
+      filter(abs(Correlation - corr_median) < 1e-10) %>%
+      filter(Pvalue <= 0.05, Correlation > 0) %>%
+      ungroup() %>%
+      distinct(KeepX, KeepY, Component)
+    
+    # Detailed log: one row per flipped Repeat/Fold case
+    flip_log_list <- vector("list", nrow(sig_combos))
+    
+    # Summary: one row per sig combo
+    flip_summary_list <- vector("list", nrow(sig_combos))
+    
+    for (i in seq_len(nrow(sig_combos))) {
+      
+      keepx_i <- sig_combos$KeepX[i]
+      keepy_i <- sig_combos$KeepY[i]
+      comp_i  <- sig_combos$Component[i]
+      comp_col_name <- paste0("comp", comp_i)
+      
+      # Combined X and Y for robust PCA orientation
+      full_train_loadings <- rbind(
+        full_train_loadingsX %>%
+          filter(keepX == keepx_i, keepY == keepy_i),
+        full_train_loadingsY %>%
+          filter(keepX == keepx_i, keepY == keepy_i)
+      )
+      
+      pca_input <- full_train_loadings %>%
+        dplyr::select(Repeat, Fold, Variable, all_of(comp_col_name)) %>%
+        tidyr::pivot_wider(
+          id_cols = c(Repeat, Fold),
+          names_from = Variable,
+          values_from = all_of(comp_col_name)
+        ) %>%
+        arrange(Repeat, Fold)
+      
+      pc1 <- pca_input %>%
+        dplyr::select(Repeat, Fold)
+      
+      pca <- pca_input %>%
+        dplyr::select(-Repeat, -Fold) %>%
+        prcomp(scale. = FALSE, center = FALSE)
+      
+      pc1$PC1 <- pca$x[, 1]
+      
+      # Flipped rows for this significant combo
+      flip_index <- pc1 %>%
+        filter(PC1 < 0) %>%
+        mutate(
+          KeepX = keepx_i,
+          KeepY = keepy_i,
+          Component = comp_i
+        ) %>%
+        dplyr::select(Repeat, Fold, KeepX, KeepY, Component)
+      
+      flip_log_list[[i]] <- flip_index
+      
+      flip_summary_list[[i]] <- tibble::tibble(
+        KeepX = keepx_i,
+        KeepY = keepy_i,
+        Component = comp_i,
+        n_flips = nrow(flip_index),
+        flipped_any = nrow(flip_index) > 0
+      )
+      
+      # Keys to flip
+      flip_keys <- paste(flip_index$Repeat, flip_index$Fold)
+      
+      if (length(flip_keys) > 0) {
+        
+        idx <- with(
+          full_train_loadingsX,
+          keepX == keepx_i &
+            keepY == keepy_i &
+            paste(Repeat, Fold) %in% flip_keys
+        )
+        full_train_loadingsX[idx, comp_col_name] <-
+          -full_train_loadingsX[idx, comp_col_name]
+        
+        idx <- with(
+          full_train_loadingsY,
+          keepX == keepx_i &
+            keepY == keepy_i &
+            paste(Repeat, Fold) %in% flip_keys
+        )
+        full_train_loadingsY[idx, comp_col_name] <-
+          -full_train_loadingsY[idx, comp_col_name]
+        
+        idx <- with(
+          full_tuneX,
+          keepX == keepx_i &
+            keepY == keepy_i &
+            paste(Repeat, Fold) %in% flip_keys
+        )
+        full_tuneX[idx, comp_col_name] <-
+          -full_tuneX[idx, comp_col_name]
+        
+        idx <- with(
+          full_tuneY,
+          keepX == keepx_i &
+            keepY == keepy_i &
+            paste(Repeat, Fold) %in% flip_keys
+        )
+        full_tuneY[idx, comp_col_name] <-
+          -full_tuneY[idx, comp_col_name]
+        
+        idx <- with(
+          full_testX,
+          keepX == keepx_i &
+            keepY == keepy_i &
+            paste(Repeat, Fold) %in% flip_keys
+        )
+        full_testX[idx, comp_col_name] <-
+          -full_testX[idx, comp_col_name]
+        
+        idx <- with(
+          full_testY,
+          keepX == keepx_i &
+            keepY == keepy_i &
+            paste(Repeat, Fold) %in% flip_keys
+        )
+        full_testY[idx, comp_col_name] <-
+          -full_testY[idx, comp_col_name]
+      }
+    }
+    
+    # Final logs
+    flip_log_df <- dplyr::bind_rows(flip_log_list)
+    flip_summary_df <- dplyr::bind_rows(flip_summary_list)
+    
+    # Counts
+    n_sig_combos <- nrow(sig_combos)
+    n_sig_combos_flipped <- sum(flip_summary_df$flipped_any)
+    total_n_flips <- nrow(flip_log_df)
+    
+    cat(sprintf("Number of significant combinations checked: %d.\n", n_sig_combos))
+    cat(sprintf("Total number of flipped Repeat/Fold cases: %d.\n", total_n_flips))
+    
+    if (n_sig_combos_flipped > 0) {
+      cat("\nSign flipping has been detected and has adjusted the output of the significant combinations accordingly.\nA detailed sign flip summary and log has been outputed in flip_summary_df and flip_log_df.")
+    } else {
+      cat("\nNo sign flips detected.")
+    }
+  }
 
   return(list(results_tune_df = results_tune_df,
               results_test_df = results_test_df,
@@ -562,9 +728,12 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
               full_testY = full_testY,
               folds = folds,
               full_yhat_tune = full_yhat_tune %>%
-                select(Repeat, fold, keepX, keepY, component, everything()),
+                dplyr::select(Repeat, fold, keepX, keepY, component, everything()),
               full_yhat_test = full_yhat_test %>%
-                select(Repeat, fold, keepX, keepY, component, everything())
+                dplyr::select(Repeat, fold, keepX, keepY, component, everything()),
+              sig_combos = sig_combos,
+              flip_summary_df = flip_summary_df,
+              flip_log_df = flip_log_df
               )
-         )
+  )
 }
