@@ -214,7 +214,7 @@ CASPOC <- function (X, Y, ncomp = 1, numRepeats = 11, numFolds = 10, keepX_optio
   if(!is.numeric(ncomp)) {
     stop("Error: 'ncomp' must be numerical.")
   }
-  if(!isTRUEorFALSE(sign_flipping)) {
+  if (!is.logical(sign_flipping) || length(sign_flipping) != 1L || is.na(sign_flipping)) {
     stop("Error: 'sign_flipping' must be TRUE/FALSE.")
   }
 
