@@ -140,6 +140,7 @@ deflate_sPLS_data <- function(splsModel, ncomp, trainX, trainY, tuneX, tuneY, te
 #' @param base_seed Random seed for reproducibility. Use instead of 'set.seed()', since the function internally updates the seed between repeats.
 #' @param manual_folds Manually supply folds. Should be a list of lists. Outer list should be of length numRepeats. Inner list should be of length numFolds and contain integer vectors supplying row indices for each fold.
 #' @param sign_flipping A boolean option for automatic alignment of signs in the output, attempting to resolve sign ambiguity from the sPLS using a PCA method. This will only be done for the significant associations between X and Y. A flip summary and log will be returned. Default is TRUE.
+#' @param binary A boolean option for continuous univariate or multivariate analysis (FALSE) or binary univarite analysis (TRUE). Default is FALSE.
 #' @return A list containing several elements:
 #' \describe{
 #'   \item{results_tune_df}{A data.frame with correlation results for each repeat and hyperparameter combination from the tuning folds}
@@ -151,6 +152,8 @@ deflate_sPLS_data <- function(splsModel, ncomp, trainX, trainY, tuneX, tuneY, te
 #'   \item{full_testX}{A data.frame with all X component scores for each repeat and hyperparameter combination from the testing folds}
 #'   \item{full_testY}{A data.frame with all Y component scores for each repeat and hyperparameter combination from the testing folds}
 #'   \item{folds}{Return the list of folds for CV}
+#'   \item{flip_summary_df}{Return summary data.frame indicating whether sign flipping was detected for each significant tuning combination}
+#'   \item{flip_log_df}{Return detailed log showing which repeat, fold, keepX/keepY combination, and component was flipped to resolve sign ambiguity}
 #'   }
 #' @examples
 #' library(mixOmics)
